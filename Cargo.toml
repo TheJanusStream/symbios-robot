@@ -1,0 +1,16 @@
+[package]
+name = "symbios-robot"
+version = "0.1.0"
+edition = "2024"
+authors = ["Janus"]
+description = "Engine-agnostic robot interpretation layer for Symbios L-Systems using glam."
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/TheJanusStream/symbios-robot"
+keywords = ["lsystem", "procedural", "generative", "simulation"]
+categories = ["simulation", "game-development", "robotics"]
+
+[dependencies]
+symbios = "1.4"
+glam = { version = "0.30.10", features = ["serde"] }
+serde = { version = "1.0", features = ["derive"] }
