@@ -23,6 +23,7 @@ pub struct RobotBlueprint {
 
     /// All physical connections between modules.
     pub joints: Vec<JointDefinition>,
+    pub(crate) sensors: (),
 }
 
 impl RobotBlueprint {

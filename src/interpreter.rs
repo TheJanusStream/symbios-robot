@@ -265,8 +265,10 @@ impl RobotInterpreter {
                 RobotOp::SetJointType(t) => turtle.joint_config.joint_type = *t,
                 RobotOp::SetJointLimits => {
                     // Params: min, max, effort, velocity
-                    let min = p(0, -PI);
-                    let max = p(1, PI);
+                    let a = p(0, -PI);
+                    let b = p(1, PI);
+                    // Mutation can jitter limits so min > max; swap to avoid Avian3D panic.
+                    let (min, max) = if a <= b { (a, b) } else { (b, a) };
                     let effort = p(2, 100.0);
                     let vel = p(3, 10.0);
                     turtle.joint_config.limits = Some(JointLimit {
