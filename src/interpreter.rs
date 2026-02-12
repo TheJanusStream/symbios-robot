@@ -5,6 +5,7 @@ use crate::blueprint::{
     SensorType, ShapePrimitive,
 };
 use crate::turtle::{RobotOp, RobotTurtleState};
+use bevy_heavy::ComputeMassProperties3d as _;
 use glam::{Quat, Vec3};
 use std::collections::HashMap;
 use std::f32::consts::PI;
@@ -209,12 +210,14 @@ impl RobotInterpreter {
                     let module_rotation = turtle.rotation;
 
                     // 3. Register Module
-                    let volume = calculate_approx_volume(&shape);
+                    let density = self.config.default_density;
+                    let mass = shape.to_bevy_primitive().mass(density);
                     blueprint.add_module(
                         id,
                         RobotModule {
                             shape,
-                            mass: volume * self.config.default_density,
+                            mass,
+                            density,
                             material_id: turtle.material_id,
                             sensors: Vec::new(),
                             transform: (module_center_pos, module_rotation),
@@ -321,18 +324,5 @@ impl RobotInterpreter {
         }
 
         blueprint
-    }
-}
-
-fn calculate_approx_volume(shape: &ShapePrimitive) -> f32 {
-    match shape {
-        ShapePrimitive::Box(extents) => extents.x * 2.0 * extents.y * 2.0 * extents.z * 2.0,
-        ShapePrimitive::Cylinder { radius, height } => PI * radius * radius * height,
-        ShapePrimitive::Sphere(radius) => (4.0 / 3.0) * PI * radius.powi(3),
-        ShapePrimitive::Capsule { radius, height } => {
-            let cyl_vol = PI * radius * radius * height;
-            let sphere_vol = (4.0 / 3.0) * PI * radius.powi(3);
-            cyl_vol + sphere_vol
-        }
     }
 }

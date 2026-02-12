@@ -1,3 +1,5 @@
+use bevy_heavy::ComputeMassProperties3d;
+use bevy_math::primitives::{Capsule3d, Cuboid, Cylinder, Sphere};
 use glam::{Quat, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -49,8 +51,11 @@ pub struct RobotModule {
     /// The physical shape of this segment.
     pub shape: ShapePrimitive,
 
-    /// Mass in kg. If 0.0, physics engines should treat it as static or calculate from density.
+    /// Mass in kg, computed from shape volume and density via `bevy_heavy`.
     pub mass: f32,
+
+    /// Density in kg/m³ used to derive mass properties.
+    pub density: f32,
 
     /// Material ID for visual rendering (links to external palette).
     pub material_id: MaterialId,
@@ -60,7 +65,7 @@ pub struct RobotModule {
 
     /// Initial World Transform (Position, Rotation) for the Rest Pose.
     /// Essential for stable physics initialization.
-    pub transform: (Vec3, Quat), 
+    pub transform: (Vec3, Quat),
 }
 
 /// Supported geometric primitives for robot segments.
@@ -74,6 +79,62 @@ pub enum ShapePrimitive {
     Sphere(f32),
     /// A capsule defined by radius and height (aligned along Y axis).
     Capsule { radius: f32, height: f32 },
+}
+
+/// A type-erased wrapper so we can call [`ComputeMassProperties3d`] on any variant.
+#[derive(Clone, Copy, Debug)]
+pub enum BevyPrimitive {
+    Cuboid(Cuboid),
+    Cylinder(Cylinder),
+    Sphere(Sphere),
+    Capsule(Capsule3d),
+}
+
+impl ComputeMassProperties3d for BevyPrimitive {
+    fn mass(&self, density: f32) -> f32 {
+        match self {
+            Self::Cuboid(s) => s.mass(density),
+            Self::Cylinder(s) => s.mass(density),
+            Self::Sphere(s) => s.mass(density),
+            Self::Capsule(s) => s.mass(density),
+        }
+    }
+
+    fn unit_principal_angular_inertia(&self) -> Vec3 {
+        match self {
+            Self::Cuboid(s) => s.unit_principal_angular_inertia(),
+            Self::Cylinder(s) => s.unit_principal_angular_inertia(),
+            Self::Sphere(s) => s.unit_principal_angular_inertia(),
+            Self::Capsule(s) => s.unit_principal_angular_inertia(),
+        }
+    }
+
+    fn center_of_mass(&self) -> Vec3 {
+        match self {
+            Self::Cuboid(s) => s.center_of_mass(),
+            Self::Cylinder(s) => s.center_of_mass(),
+            Self::Sphere(s) => s.center_of_mass(),
+            Self::Capsule(s) => s.center_of_mass(),
+        }
+    }
+}
+
+impl ShapePrimitive {
+    /// Convert to the corresponding `bevy_math` primitive for mass-property computation.
+    pub fn to_bevy_primitive(self) -> BevyPrimitive {
+        match self {
+            Self::Box(half_extents) => BevyPrimitive::Cuboid(Cuboid {
+                half_size: half_extents,
+            }),
+            Self::Cylinder { radius, height } => {
+                BevyPrimitive::Cylinder(Cylinder::new(radius, height))
+            }
+            Self::Sphere(r) => BevyPrimitive::Sphere(Sphere::new(r)),
+            Self::Capsule { radius, height } => {
+                BevyPrimitive::Capsule(Capsule3d::new(radius, height))
+            }
+        }
+    }
 }
 
 /// A kinematic connection between two modules.
