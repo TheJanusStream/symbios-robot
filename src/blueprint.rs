@@ -1,5 +1,7 @@
 use bevy_heavy::ComputeMassProperties3d;
+use bevy_math::bounding::{Aabb3d, Bounded3d, BoundingSphere, BoundingVolume};
 use bevy_math::primitives::{Capsule3d, Cuboid, Cylinder, Sphere};
+use bevy_math::Isometry3d;
 use glam::{Quat, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -42,6 +44,22 @@ impl RobotBlueprint {
 
     pub fn add_joint(&mut self, joint: JointDefinition) {
         self.joints.push(joint);
+    }
+
+    /// Compute the axis-aligned bounding box of the entire robot
+    /// after applying `rotation` to the blueprint's rest pose.
+    pub fn aabb(&self, rotation: Quat) -> Aabb3d {
+        let mut combined: Option<Aabb3d> = None;
+        for module in self.modules.values() {
+            let (pos, rot) = module.transform;
+            let isometry = Isometry3d::new(rotation * pos, rotation * rot);
+            let aabb = module.shape.to_bevy_primitive().aabb_3d(isometry);
+            combined = Some(match combined {
+                Some(c) => c.merge(&aabb),
+                None => aabb,
+            });
+        }
+        combined.unwrap_or(Aabb3d::new(Vec3::ZERO, Vec3::ZERO))
     }
 }
 
@@ -115,6 +133,26 @@ impl ComputeMassProperties3d for BevyPrimitive {
             Self::Cylinder(s) => s.center_of_mass(),
             Self::Sphere(s) => s.center_of_mass(),
             Self::Capsule(s) => s.center_of_mass(),
+        }
+    }
+}
+
+impl Bounded3d for BevyPrimitive {
+    fn aabb_3d(&self, isometry: impl Into<Isometry3d>) -> Aabb3d {
+        match self {
+            Self::Cuboid(s) => s.aabb_3d(isometry),
+            Self::Cylinder(s) => s.aabb_3d(isometry),
+            Self::Sphere(s) => s.aabb_3d(isometry),
+            Self::Capsule(s) => s.aabb_3d(isometry),
+        }
+    }
+
+    fn bounding_sphere(&self, isometry: impl Into<Isometry3d>) -> BoundingSphere {
+        match self {
+            Self::Cuboid(s) => s.bounding_sphere(isometry),
+            Self::Cylinder(s) => s.bounding_sphere(isometry),
+            Self::Sphere(s) => s.bounding_sphere(isometry),
+            Self::Capsule(s) => s.bounding_sphere(isometry),
         }
     }
 }
