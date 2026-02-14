@@ -164,17 +164,17 @@ impl RobotInterpreter {
                     // Default growth axis is Y (Up).
                     let (shape, height_axis_len) = match op {
                         RobotOp::SpawnBox => {
-                            let len = p(0, self.config.default_length); // Y axis (Growth)
-                            let wid = p(1, turtle.width); // X axis
-                            let hgt = p(2, turtle.width); // Z axis
+                            let len = p(0, self.config.default_length).abs(); // Y axis (Growth)
+                            let wid = p(1, turtle.width).abs(); // X axis
+                            let hgt = p(2, turtle.width).abs(); // Z axis
                             (
                                 ShapePrimitive::Box(Vec3::new(wid / 2.0, len / 2.0, hgt / 2.0)),
                                 len,
                             )
                         }
                         RobotOp::SpawnCylinder => {
-                            let len = p(0, self.config.default_length);
-                            let rad = p(1, turtle.width / 2.0);
+                            let len = p(0, self.config.default_length).abs();
+                            let rad = p(1, turtle.width / 2.0).abs();
                             (
                                 ShapePrimitive::Cylinder {
                                     radius: rad,
@@ -184,8 +184,8 @@ impl RobotInterpreter {
                             )
                         }
                         RobotOp::SpawnCapsule => {
-                            let len = p(0, self.config.default_length);
-                            let rad = p(1, turtle.width / 2.0);
+                            let len = p(0, self.config.default_length).abs();
+                            let rad = p(1, turtle.width / 2.0).abs();
                             (
                                 ShapePrimitive::Capsule {
                                     radius: rad,
@@ -195,7 +195,7 @@ impl RobotInterpreter {
                             )
                         }
                         RobotOp::SpawnSphere => {
-                            let rad = p(0, turtle.width / 2.0);
+                            let rad = p(0, turtle.width / 2.0).abs();
                             (ShapePrimitive::Sphere(rad), rad * 2.0)
                         }
                         _ => unreachable!(),
