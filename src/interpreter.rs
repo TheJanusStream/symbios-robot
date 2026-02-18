@@ -18,7 +18,7 @@ pub struct RobotConfig {
     pub default_length: f32,
     /// Default width/radius for shapes.
     pub default_width: f32,
-    /// Default density (kg/m^3) for calculating mass. Default: 1000 (Water/Plastic-ish).
+    /// Default density (kg/m^3) for calculating mass. Default: 50 (Hollow Plastic-ish).
     pub default_density: f32,
     /// Default rotation angle (in radians) for Yaw/Pitch/Roll.
     pub default_angle: f32,
@@ -31,7 +31,7 @@ impl Default for RobotConfig {
         Self {
             default_length: 1.0,
             default_width: 0.2,
-            default_density: 1000.0,
+            default_density: 100.0,
             default_angle: 45.0f32.to_radians(),
             max_stack_depth: 1024,
         }
