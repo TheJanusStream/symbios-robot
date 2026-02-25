@@ -1,7 +1,7 @@
 use bevy_heavy::ComputeMassProperties3d;
+use bevy_math::Isometry3d;
 use bevy_math::bounding::{Aabb3d, Bounded3d, BoundingSphere, BoundingVolume};
 use bevy_math::primitives::{Capsule3d, Cuboid, Cylinder, Sphere};
-use bevy_math::Isometry3d;
 use glam::{Quat, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -17,6 +17,10 @@ pub type MaterialId = u8;
 ///
 /// This structure represents the "Phenotype" generated from an L-System.
 /// It contains a graph of rigid bodies (modules) connected by joints.
+///
+/// Marked `#[non_exhaustive]` so that new fields can be added without breaking
+/// downstream code that matches or constructs this type.
+#[non_exhaustive]
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct RobotBlueprint {
     /// The ID of the root module (base of the robot).
@@ -27,14 +31,18 @@ pub struct RobotBlueprint {
 
     /// All physical connections between modules.
     pub joints: Vec<JointDefinition>,
-    pub(crate) sensors: (),
 }
 
 impl RobotBlueprint {
+    /// Creates an empty blueprint with no modules or joints.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Inserts a module into the blueprint.
+    ///
+    /// The first module inserted is automatically set as [`root_module`](Self::root_module).
+    /// If `id` already exists it is silently overwritten.
     pub fn add_module(&mut self, id: ModuleId, module: RobotModule) {
         if self.modules.is_empty() {
             self.root_module = Some(id);
@@ -42,6 +50,7 @@ impl RobotBlueprint {
         self.modules.insert(id, module);
     }
 
+    /// Appends a joint to the blueprint.
     pub fn add_joint(&mut self, joint: JointDefinition) {
         self.joints.push(joint);
     }
@@ -99,7 +108,11 @@ pub enum ShapePrimitive {
     Capsule { radius: f32, height: f32 },
 }
 
-/// A type-erased wrapper so we can call [`ComputeMassProperties3d`] on any variant.
+/// A type-erased wrapper around `bevy_math` primitives.
+///
+/// Enables calling [`bevy_heavy::ComputeMassProperties3d`] and
+/// [`bevy_math::bounding::Bounded3d`] on any [`ShapePrimitive`] variant through a
+/// single enum dispatch. Obtain one via [`ShapePrimitive::to_bevy_primitive`].
 #[derive(Clone, Copy, Debug)]
 pub enum BevyPrimitive {
     Cuboid(Cuboid),
@@ -239,11 +252,17 @@ pub struct SensorMount {
     pub local_rotation: Quat,
 }
 
+/// The kind of sensor mounted on a module.
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum SensorType {
+    /// RGB or depth camera.
     Camera,
+    /// Laser range scanner.
     Lidar,
+    /// Contact / pressure sensor.
     Touch,
+    /// Inertial measurement unit (accelerometer + gyroscope).
     IMU,
+    /// Ultrasonic distance sensor.
     Ultrasonic,
 }

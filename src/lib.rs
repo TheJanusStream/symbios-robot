@@ -1,11 +1,37 @@
 //! # symbios-robot
 //!
-//! A sovereign interpretation crate for [Symbios](https://crates.io/crates/symbios) that translates
-//! L-System grammars into engine-agnostic robotic blueprints.
+//! Engine-agnostic robot interpretation layer for [Symbios](https://crates.io/crates/symbios) L-Systems.
 //!
-//! It decouples the *Genotype* (L-System String) from the *Phenotype* (Physics Simulation),
-//! producing a `RobotBlueprint` structure that can be ingested by game engines (Bevy),
-//! simulators (Gazebo), or physical manufacturing pipelines.
+//! This crate translates an L-System symbol sequence into a [`blueprint::RobotBlueprint`] —
+//! a complete description of a robot's topology (rigid bodies, joints, sensors) that decouples
+//! the *Genotype* (L-System string) from the *Phenotype* (physics simulation).
+//!
+//! ## Quick start
+//!
+//! ```rust,ignore
+//! use symbios::{SymbiosState, SymbolTable};
+//! use symbios_robot::{RobotConfig, RobotInterpreter};
+//!
+//! let mut interner = SymbolTable::new();
+//! interner.intern("B").unwrap();
+//!
+//! let mut interpreter = RobotInterpreter::new(RobotConfig::default());
+//! interpreter.populate_standard_symbols(&interner);
+//!
+//! let mut state = SymbiosState::new();
+//! let b_id = interner.resolve_id("B").unwrap();
+//! state.push(b_id, 0.0, &[1.0, 0.1, 0.1]).unwrap();
+//!
+//! let blueprint = interpreter.build_blueprint(&state);
+//! assert_eq!(blueprint.modules.len(), 1);
+//! ```
+//!
+//! ## Modules
+//!
+//! - [`blueprint`] — Data structures: [`blueprint::RobotBlueprint`], [`blueprint::RobotModule`],
+//!   [`blueprint::JointDefinition`], [`blueprint::ShapePrimitive`], etc.
+//! - [`interpreter`] — [`interpreter::RobotInterpreter`] and [`interpreter::RobotConfig`].
+//! - [`turtle`] — [`turtle::RobotTurtleState`], [`turtle::RobotOp`], and [`turtle::ActiveJointConfig`].
 
 pub mod blueprint;
 pub mod interpreter;

@@ -1,4 +1,9 @@
-//! Interpreter that converts L-System symbols into a RobotBlueprint.
+//! Interpreter that converts an L-System symbol sequence into a [`RobotBlueprint`].
+//!
+//! The entry point is [`RobotInterpreter`]. Configure it with a [`RobotConfig`],
+//! register symbol-to-operation mappings via [`RobotInterpreter::set_op`] or
+//! [`RobotInterpreter::populate_standard_symbols`], then call
+//! [`RobotInterpreter::build_blueprint`] with a [`symbios::SymbiosState`].
 
 use crate::blueprint::{
     JointDefinition, JointLimit, JointType, ModuleId, RobotBlueprint, RobotModule, SensorMount,
@@ -45,6 +50,11 @@ pub struct RobotInterpreter {
 }
 
 impl RobotInterpreter {
+    /// Creates a new interpreter with the given configuration and an empty symbol map.
+    ///
+    /// Register operations with [`set_op`](Self::set_op) or
+    /// [`populate_standard_symbols`](Self::populate_standard_symbols) before calling
+    /// [`build_blueprint`](Self::build_blueprint).
     pub fn new(config: RobotConfig) -> Self {
         Self {
             op_map: Vec::new(),
@@ -52,11 +62,19 @@ impl RobotInterpreter {
         }
     }
 
+    /// Replaces the entire symbol-to-operation map in one step (builder pattern).
+    ///
+    /// `map` is indexed by symbol ID as returned by [`symbios::SymbolTable`].
+    /// Any ID that falls outside the slice is treated as [`RobotOp::Ignore`].
     pub fn with_map(mut self, map: Vec<RobotOp>) -> Self {
         self.op_map = map;
         self
     }
 
+    /// Assigns a single [`RobotOp`] to a symbol ID.
+    ///
+    /// The map is grown automatically when `sym_id` exceeds its current length;
+    /// gaps are filled with [`RobotOp::Ignore`].
     pub fn set_op(&mut self, sym_id: u16, op: RobotOp) {
         let idx = sym_id as usize;
         if idx >= self.op_map.len() {
@@ -65,7 +83,13 @@ impl RobotInterpreter {
         self.op_map[idx] = op;
     }
 
-    /// Populates standard robot symbols.
+    /// Registers the conventional symbol-to-operation mappings for all standard symbols.
+    ///
+    /// Looks up each standard symbol string (e.g. `"B"`, `"+"`, `"["`) in `interner`
+    /// and maps it to its corresponding [`RobotOp`]. Symbols that are not present in the
+    /// interner are silently skipped.
+    ///
+    /// See the crate README for the full symbol table.
     pub fn populate_standard_symbols(&mut self, interner: &SymbolTable) {
         let mappings = [
             // Spatial
@@ -107,7 +131,25 @@ impl RobotInterpreter {
         }
     }
 
-    /// Builds a blueprint from the L-System state.
+    /// Interprets the full L-System `state` and returns the resulting [`RobotBlueprint`].
+    ///
+    /// Walks every symbol in `state` in order, dispatching each to its registered
+    /// [`RobotOp`]. The turtle starts at the world origin facing `+Y`. Symbols with
+    /// no registered mapping are silently ignored.
+    ///
+    /// # Geometry placement
+    ///
+    /// When a geometry symbol (`B`, `C`, `O`, `K`) is encountered:
+    /// 1. A [`RobotModule`] is spawned whose pivot (bottom) is at the turtle's current position.
+    /// 2. The module's center is placed at `turtle_pos + up × (height / 2)`.
+    /// 3. If a previous module exists, a [`JointDefinition`] is created connecting it to the new one.
+    /// 4. The turtle advances to the distal end: `turtle_pos + up × height`.
+    ///
+    /// # Push / Pop
+    ///
+    /// `[` saves the full turtle state (position, rotation, current module, joint config, width,
+    /// material) onto a stack. `]` restores it. This enables branching morphologies.
+    /// Pushes beyond `max_stack_depth` are silently dropped.
     pub fn build_blueprint(&self, state: &SymbiosState) -> RobotBlueprint {
         let mut blueprint = RobotBlueprint::default();
         let mut turtle = RobotTurtleState {
@@ -297,10 +339,7 @@ impl RobotInterpreter {
 
                         if let Some(module) = blueprint.modules.get_mut(&mod_id) {
                             module.sensors.push(SensorMount {
-                                sensor_type: match op {
-                                    // Handle specific overrides if needed, or rely on enum
-                                    _ => *sensor_type,
-                                },
+                                sensor_type: *sensor_type,
                                 local_position: local_pos,
                                 local_rotation: local_rot,
                             });

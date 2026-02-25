@@ -85,16 +85,19 @@ impl RobotTurtleState {
         self.rotation * Vec3::X
     }
 
+    /// Rotates the turtle around its local X axis by `angle` radians (Pitch).
     pub fn rotate_local_x(&mut self, angle: f32) {
         let rot = Quat::from_axis_angle(Vec3::X, angle);
         self.rotation *= rot;
     }
 
+    /// Rotates the turtle around its local Y axis by `angle` radians (Roll).
     pub fn rotate_local_y(&mut self, angle: f32) {
         let rot = Quat::from_axis_angle(Vec3::Y, angle);
         self.rotation *= rot;
     }
 
+    /// Rotates the turtle around its local Z axis by `angle` radians (Yaw).
     pub fn rotate_local_z(&mut self, angle: f32) {
         let rot = Quat::from_axis_angle(Vec3::Z, angle);
         self.rotation *= rot;
@@ -142,7 +145,10 @@ pub enum RobotOp {
     MountSensor(SensorType),
 
     // --- Flow Control ---
+    /// Save the full turtle state onto the stack (`[`).
     Push,
+    /// Restore the most recently pushed turtle state (`]`).
     Pop,
+    /// No-op — symbol has no registered meaning.
     Ignore,
 }
