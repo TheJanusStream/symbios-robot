@@ -10,7 +10,7 @@ This crate translates L-System grammars into a `RobotBlueprint` — a complete d
 
 An L-System produces a sequence of symbols and parameters. `RobotInterpreter` walks that sequence, maintaining a **turtle** (a cursor with position, orientation, and state), and progressively builds a `RobotBlueprint`.
 
-```
+```text
 L-System String  →  RobotInterpreter  →  RobotBlueprint
   "B J B(2)"            (turtle)           2 modules
                                            1 hinge joint
@@ -19,6 +19,7 @@ L-System String  →  RobotInterpreter  →  RobotBlueprint
 ### The Turtle
 
 The turtle state tracks:
+
 - **Position / Rotation** — where the cursor is in world space
 - **Current module** — the last rigid body spawned (used as the joint parent)
 - **Active joint config** — type, axis, and limits for the *next* joint
@@ -29,6 +30,7 @@ When a geometry symbol is interpreted (e.g. `B`, `C`, `O`, `K`), a new `RobotMod
 ### The Blueprint
 
 `RobotBlueprint` is a plain data structure — no engine dependencies. It contains:
+
 - `modules`: a map of `ModuleId → RobotModule` (shape, mass, transform, sensors)
 - `joints`: a list of `JointDefinition` (parent, child, anchors, type, limits)
 - `root_module`: the ID of the first module spawned (base of the kinematic chain)
@@ -70,44 +72,44 @@ assert_eq!(blueprint.joints.len(), 1);
 
 Use `RobotInterpreter::populate_standard_symbols` to register the conventional mappings, or register your own with `set_op`.
 
-| Symbol | Operation | Parameters |
-|--------|-----------|------------|
-| `f`    | Move forward (no geometry) | `(length)` |
-| `+`    | Yaw +1× default angle | `(angle_deg)` override |
-| `-`    | Yaw −1× default angle | `(angle_deg)` override |
-| `&`    | Pitch +1× default angle | `(angle_deg)` override |
-| `^`    | Pitch −1× default angle | `(angle_deg)` override |
-| `\`    | Roll +1× default angle | `(angle_deg)` override |
-| `/`    | Roll −1× default angle | `(angle_deg)` override |
-| `\|`   | Turn around 180° | — |
-| `B`    | Spawn Box | `(length, width, depth)` |
-| `C`    | Spawn Cylinder | `(length, radius)` |
-| `O`    | Spawn Sphere | `(radius)` |
-| `K`    | Spawn Capsule | `(length, radius)` |
-| `!`    | Set default width/radius | `(width)` |
-| `'`    | Set material ID | `(material_id)` |
-| `J`    | Set next joint → Hinge | — |
-| `Jf`   | Set next joint → Fixed | — |
-| `Jb`   | Set next joint → Ball | — |
-| `Jl`   | Set joint limits | `(min, max, effort, velocity)` |
-| `S`    | Mount Camera sensor | — |
-| `Si`   | Mount IMU sensor | — |
-| `St`   | Mount Touch sensor | — |
-| `Sl`   | Mount Lidar sensor | — |
-| `[`    | Push turtle state | — |
-| `]`    | Pop turtle state | — |
+| Symbol | Operation                  | Parameters                     |
+|--------|----------------------------|--------------------------------|
+| `f`    | Move forward (no geometry) | `(length)`                     |
+| `+`    | Yaw +1× default angle      | `(angle_deg)` override         |
+| `-`    | Yaw −1× default angle      | `(angle_deg)` override         |
+| `&`    | Pitch +1× default angle    | `(angle_deg)` override         |
+| `^`    | Pitch −1× default angle    | `(angle_deg)` override         |
+| `\`    | Roll +1× default angle     | `(angle_deg)` override         |
+| `/`    | Roll −1× default angle     | `(angle_deg)` override         |
+| `\|`   | Turn around 180°           | —                              |
+| `B`    | Spawn Box                  | `(length, width, depth)`       |
+| `C`    | Spawn Cylinder             | `(length, radius)`             |
+| `O`    | Spawn Sphere               | `(radius)`                     |
+| `K`    | Spawn Capsule              | `(length, radius)`             |
+| `!`    | Set default width/radius   | `(width)`                      |
+| `'`    | Set material ID            | `(material_id)`                |
+| `J`    | Set next joint → Hinge     | —                              |
+| `Jf`   | Set next joint → Fixed     | —                              |
+| `Jb`   | Set next joint → Ball      | —                              |
+| `Jl`   | Set joint limits           | `(min, max, effort, velocity)` |
+| `S`    | Mount Camera sensor        | —                              |
+| `Si`   | Mount IMU sensor           | —                              |
+| `St`   | Mount Touch sensor         | —                              |
+| `Sl`   | Mount Lidar sensor         | —                              |
+| `[`    | Push turtle state          | —                              |
+| `]`    | Pop turtle state           | —                              |
 
 ## Configuration
 
 `RobotConfig` controls interpreter defaults:
 
-| Field | Default | Description |
-|-------|---------|-------------|
-| `default_length` | `1.0` m | Segment length when no parameter given |
-| `default_width` | `0.2` m | Segment width/radius when no parameter given |
+| Field             | Default       | Description                                       |
+|-------------------|---------------|---------------------------------------------------|
+| `default_length`  | `1.0` m       | Segment length when no parameter given            |
+| `default_width`   | `0.2` m       | Segment width/radius when no parameter given      |
 | `default_density` | `100.0` kg/m³ | Density for mass computation (hollow plastic–ish) |
-| `default_angle` | `45°` | Rotation step for `+`, `-`, `&`, `^`, `\`, `/` |
-| `max_stack_depth` | `1024` | Maximum push/pop nesting depth |
+| `default_angle`   | `45°`         | Rotation step for `+`, `-`, `&`, `^`, `\`, `/`    |
+| `max_stack_depth` | `1024`        | Maximum push/pop nesting depth                    |
 
 ## Bounding Box
 
