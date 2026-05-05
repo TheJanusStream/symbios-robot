@@ -1,6 +1,6 @@
 //! Turtle state and operations for robotic interpretation.
 
-use crate::blueprint::{JointLimit, JointType, MaterialId, ModuleId, SensorType};
+use crate::blueprint::{AxisLimit, JointType, JointTypeKind, MaterialId, ModuleId, SensorType};
 use glam::{Quat, Vec3};
 use serde::{Deserialize, Serialize};
 
@@ -8,17 +8,24 @@ use serde::{Deserialize, Serialize};
 ///
 /// This acts as a "pen style" for physics. When the turtle spawns a new module attached
 /// to an existing one, it uses these settings to create the connection.
+///
+/// `joint_type` already encodes the drive axis (for Hinge/Prismatic/Screw). The
+/// separate `axis` field here is the *staging* axis: it is what subsequent
+/// `SetJointType` ops apply when constructing a new variant, and what
+/// `SetJointLimits` (single-axis form) tags the appended limit with. This
+/// decouples "what direction the turtle is currently configured for" from
+/// "what variant happens to be active right now".
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ActiveJointConfig {
-    /// The mechanical type of the connection (Hinge, Fixed, etc.).
+    /// The mechanical type and (where applicable) drive axis of the connection.
     pub joint_type: JointType,
 
-    /// The axis of rotation/translation relative to the parent's orientation.
-    /// Defaults to X-axis (Pitch).
+    /// Staging axis — used to populate axis-bearing variants and to tag
+    /// per-axis limits when no axis is given explicitly. Defaults to `+X`.
     pub axis: Vec3,
 
-    /// Physical limits (angle, velocity, effort).
-    pub limits: Option<JointLimit>,
+    /// Per-axis physical limits accumulated for the next joint. Empty = unlimited.
+    pub limits: Vec<AxisLimit>,
 }
 
 impl Default for ActiveJointConfig {
@@ -26,7 +33,7 @@ impl Default for ActiveJointConfig {
         Self {
             joint_type: JointType::Fixed, // Default to rigid welding
             axis: Vec3::X,
-            limits: None,
+            limits: Vec::new(),
         }
     }
 }
@@ -131,11 +138,28 @@ pub enum RobotOp {
     SpawnCapsule,
 
     // --- Configuration (The Physics) ---
-    /// Set the type of the NEXT joint to be created.
-    SetJointType(JointType),
-    /// Set joint limits. Params: `(min, max, effort, velocity)`.
+    /// Set the kind of the NEXT joint to be created.
+    ///
+    /// Axis-bearing variants ([`JointType::Hinge`], [`JointType::Prismatic`],
+    /// [`JointType::Screw`]) are populated from the turtle's staging
+    /// [`ActiveJointConfig::axis`] at interpretation time, so the variant
+    /// passed here can be a placeholder (`Vec3::X` is used by the standard
+    /// symbol map).
+    SetJointType(JointTypeKind),
+    /// Set the staging joint axis. Params: `(x, y, z)`.
+    SetJointAxis,
+    /// Set the screw `pitch` (meters per revolution) for the next [`JointType::Screw`].
+    /// Params: `(pitch)`.
+    SetScrewPitch,
+    /// Append one [`AxisLimit`] using the turtle's current staging axis.
+    /// Params: `(min, max, effort, velocity)`.
     SetJointLimits,
-    /// Set the Material ID for visual rendering.
+    /// Append one [`AxisLimit`] with an explicit axis.
+    /// Params: `(ax, ay, az, min, max, effort, velocity)`.
+    AddAxisLimit,
+    /// Clear any accumulated [`AxisLimit`]s from the staging joint config.
+    ClearJointLimits,
+    /// Set the Material ID for visual rendering. Params: `(material_id)`.
     SetMaterial,
     /// Set the default width/radius for subsequent shapes.
     SetWidth,
@@ -143,6 +167,10 @@ pub enum RobotOp {
     // --- Attachments (The Senses) ---
     /// Mount a sensor at the current location.
     MountSensor(SensorType),
+    /// Declare an end-effector / TCP frame at the turtle's current pose,
+    /// pinned to the module the turtle is currently standing on.
+    /// Params: `(ee_id)`.
+    MarkEndEffector,
 
     // --- Flow Control ---
     /// Save the full turtle state onto the stack (`[`).

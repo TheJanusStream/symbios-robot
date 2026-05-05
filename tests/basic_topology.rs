@@ -1,7 +1,7 @@
 // tests/basic_topology.rs
 use glam::Vec3;
 use symbios::{SymbiosState, SymbolTable};
-use symbios_robot::{JointType, RobotConfig, RobotInterpreter, RobotOp};
+use symbios_robot::{JointType, JointTypeKind, RobotConfig, RobotInterpreter, RobotOp};
 
 fn setup() -> (RobotInterpreter, SymbolTable) {
     let mut interner = SymbolTable::new();
@@ -16,7 +16,7 @@ fn setup() -> (RobotInterpreter, SymbolTable) {
     interpreter.set_op(interner.resolve_id("B").unwrap(), RobotOp::SpawnBox);
     interpreter.set_op(
         interner.resolve_id("J").unwrap(),
-        RobotOp::SetJointType(JointType::Hinge),
+        RobotOp::SetJointType(JointTypeKind::Hinge),
     );
     interpreter.set_op(interner.resolve_id("+").unwrap(), RobotOp::Yaw(1.0));
 
@@ -50,7 +50,9 @@ fn test_simple_arm_topology() {
     // Topology check
     assert_eq!(joint.parent_id, 0);
     assert_eq!(joint.child_id, 1);
-    assert_eq!(joint.joint_type, JointType::Hinge);
+    // The default staging axis is +X. Both parent and turtle are at identity
+    // rotation here, so the parent-local axis is just +X.
+    assert_eq!(joint.joint_type, JointType::Hinge { axis: Vec3::X });
 
     // Geometric check (Direct Attachment Logic)
     // Parent (Mod 0) is Box(1.0 height). Center at (0, 0.5, 0).

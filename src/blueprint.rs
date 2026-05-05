@@ -11,7 +11,13 @@ use std::collections::HashMap;
 pub type ModuleId = u16;
 
 /// A generic material identifier referencing an external palette.
-pub type MaterialId = u8;
+///
+/// 16-bit to support large multi-material assemblies (sensor housings, fasteners,
+/// PCB substrates, etc.) where the legacy 8-bit cap (256 entries) was restrictive.
+pub type MaterialId = u16;
+
+/// A unique identifier for a named end-effector / TCP frame.
+pub type EndEffectorId = u16;
 
 /// The complete, engine-agnostic definition of a robot's topology.
 ///
@@ -31,6 +37,13 @@ pub struct RobotBlueprint {
 
     /// All physical connections between modules.
     pub joints: Vec<JointDefinition>,
+
+    /// Named end-effector / TCP frames declared on the robot.
+    ///
+    /// Multiple EEs are supported (e.g. left/right gripper). Each entry pins a
+    /// pose offset to a specific module so IK and grasp planners can resolve a
+    /// tool-center-point pose from joint angles.
+    pub end_effectors: Vec<EndEffector>,
 }
 
 impl RobotBlueprint {
@@ -53,6 +66,16 @@ impl RobotBlueprint {
     /// Appends a joint to the blueprint.
     pub fn add_joint(&mut self, joint: JointDefinition) {
         self.joints.push(joint);
+    }
+
+    /// Registers an end-effector frame on the blueprint.
+    pub fn add_end_effector(&mut self, ee: EndEffector) {
+        self.end_effectors.push(ee);
+    }
+
+    /// Looks up an end-effector by its numeric ID.
+    pub fn end_effector(&self, id: EndEffectorId) -> Option<&EndEffector> {
+        self.end_effectors.iter().find(|e| e.id == id)
     }
 
     /// Compute the axis-aligned bounding box of the entire robot
@@ -189,6 +212,12 @@ impl ShapePrimitive {
 }
 
 /// A kinematic connection between two modules.
+///
+/// The drive axis (for single-axis joints) is carried on the [`JointType`] payload
+/// so it cannot be set on a joint that has no axis. Per-axis motion limits are
+/// stored in [`JointDefinition::limits`] as a vector — empty means "unlimited",
+/// a single entry covers a single-axis joint, and up to three entries can pin
+/// the swing-twist constraints on a [`JointType::Ball`].
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct JointDefinition {
     /// The parent module (the one closer to the root).
@@ -203,40 +232,109 @@ pub struct JointDefinition {
     /// The anchor point on the child module, in child's local space.
     pub anchor_child: Vec3,
 
-    /// The type of mechanical connection.
+    /// The type of mechanical connection. Carries the drive axis (if any).
     pub joint_type: JointType,
 
-    /// The axis of rotation/translation in the Parent's local space.
-    pub axis: Vec3,
-
-    /// Physical limits of the joint.
-    pub limits: Option<JointLimit>,
+    /// Per-axis physical limits. Empty = unlimited.
+    pub limits: Vec<AxisLimit>,
 }
 
 /// Types of mechanical joints.
+///
+/// Variants carry the data that is *intrinsic* to the joint type:
+/// - [`Fixed`](Self::Fixed) and [`Ball`](Self::Ball) have no drive axis.
+/// - [`Hinge`](Self::Hinge), [`Prismatic`](Self::Prismatic), and [`Screw`](Self::Screw) carry a single axis in
+///   the parent module's local space.
+/// - [`Screw`](Self::Screw) additionally carries a `pitch` (meters of linear travel per
+///   full revolution; positive = right-handed thread).
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum JointType {
-    /// Fixed connection (welded).
+    /// Fixed connection (welded). No degrees of freedom.
     Fixed,
     /// Rotates around a single axis (e.g., knee, elbow).
-    Hinge,
-    /// Ball and socket (3 degrees of freedom).
+    Hinge { axis: Vec3 },
+    /// Ball and socket (3 rotational degrees of freedom).
     Ball,
     /// Slides along a single axis (linear actuator).
-    Prismatic,
+    Prismatic { axis: Vec3 },
+    /// Helical joint: rotation about `axis` is coupled to translation along it
+    /// by `pitch` meters per full revolution. Models lead screws and screw-driven
+    /// linear stages.
+    Screw { axis: Vec3, pitch: f32 },
 }
 
-/// Limits for a joint's motion.
+impl JointType {
+    /// Returns the drive axis for single-axis joints, or `None` for [`Fixed`](Self::Fixed) / [`Ball`](Self::Ball).
+    pub fn axis(&self) -> Option<Vec3> {
+        match self {
+            Self::Fixed | Self::Ball => None,
+            Self::Hinge { axis } | Self::Prismatic { axis } | Self::Screw { axis, .. } => {
+                Some(*axis)
+            }
+        }
+    }
+
+    /// Returns the discriminant kind (no axis / pitch payload).
+    pub fn kind(&self) -> JointTypeKind {
+        match self {
+            Self::Fixed => JointTypeKind::Fixed,
+            Self::Hinge { .. } => JointTypeKind::Hinge,
+            Self::Ball => JointTypeKind::Ball,
+            Self::Prismatic { .. } => JointTypeKind::Prismatic,
+            Self::Screw { .. } => JointTypeKind::Screw,
+        }
+    }
+}
+
+/// Tag enum naming a joint variant *without* axis/pitch payload.
+///
+/// Used by the turtle layer to decouple "which kind of joint do I want next"
+/// (a static decision baked into a symbol mapping) from the axis/pitch values
+/// that get filled in from the live turtle state when the joint is built.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub enum JointTypeKind {
+    Fixed,
+    Hinge,
+    Ball,
+    Prismatic,
+    Screw,
+}
+
+/// Motion limits along (or about) a single axis.
+///
+/// For [`JointType::Hinge`] / [`JointType::Screw`] limits are in radians and the
+/// `effort` is a torque (Nm). For [`JointType::Prismatic`] limits are in meters
+/// and `effort` is a force (N). Multiple `AxisLimit`s can be attached to a
+/// [`JointType::Ball`] to express swing-twist cones.
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
-pub struct JointLimit {
+pub struct AxisLimit {
+    /// Axis (in parent local space) that this limit constrains.
+    pub axis: Vec3,
     /// Minimum angle (radians) or distance (meters).
     pub min: f32,
     /// Maximum angle (radians) or distance (meters).
     pub max: f32,
-    /// Maximum torque (Nm) or force (N) the joint motor can apply.
+    /// Maximum torque (Nm) or force (N) the motor can apply about/along this axis.
     pub effort: f32,
-    /// Maximum velocity (rad/s or m/s).
+    /// Maximum velocity (rad/s or m/s) about/along this axis.
     pub velocity: f32,
+}
+
+/// A named end-effector / tool-center-point frame attached to a module.
+///
+/// IK solvers, grasp planners, and tooling pipelines consume this frame to
+/// resolve "where the gripper / probe / nozzle actually is" relative to the
+/// kinematic chain.
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+pub struct EndEffector {
+    /// Stable identifier (e.g. 0 = primary, 1 = secondary). Used by external
+    /// tooling to address the frame.
+    pub id: EndEffectorId,
+    /// The module the EE is rigidly attached to.
+    pub module_id: ModuleId,
+    /// EE pose offset relative to the module's center (position + orientation).
+    pub local_position: Vec3,
+    pub local_rotation: Quat,
 }
 
 /// A sensor attachment point.

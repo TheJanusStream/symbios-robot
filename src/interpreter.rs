@@ -6,8 +6,8 @@
 //! [`RobotInterpreter::build_blueprint`] with a [`symbios::SymbiosState`].
 
 use crate::blueprint::{
-    JointDefinition, JointLimit, JointType, ModuleId, RobotBlueprint, RobotModule, SensorMount,
-    SensorType, ShapePrimitive,
+    AxisLimit, EndEffector, JointDefinition, JointType, JointTypeKind, MaterialId, ModuleId,
+    RobotBlueprint, RobotModule, SensorMount, SensorType, ShapePrimitive,
 };
 use crate::turtle::{RobotOp, RobotTurtleState};
 use bevy_heavy::ComputeMassProperties3d as _;
@@ -110,15 +110,24 @@ impl RobotInterpreter {
             ("!", RobotOp::SetWidth),
             ("'", RobotOp::SetMaterial), // Using ' like visual turtle
             // Joint Configuration
-            ("J", RobotOp::SetJointType(JointType::Hinge)), // Default J is Hinge
-            ("Jf", RobotOp::SetJointType(JointType::Fixed)),
-            ("Jb", RobotOp::SetJointType(JointType::Ball)),
+            ("J", RobotOp::SetJointType(JointTypeKind::Hinge)), // Default J is Hinge
+            ("Jf", RobotOp::SetJointType(JointTypeKind::Fixed)),
+            ("Jb", RobotOp::SetJointType(JointTypeKind::Ball)),
+            ("Jp", RobotOp::SetJointType(JointTypeKind::Prismatic)),
+            ("Js", RobotOp::SetJointType(JointTypeKind::Screw)),
+            ("Ja", RobotOp::SetJointAxis),
+            ("Jh", RobotOp::SetScrewPitch), // 'h' = helix pitch
             ("Jl", RobotOp::SetJointLimits),
+            ("Jla", RobotOp::AddAxisLimit),
+            ("Jlc", RobotOp::ClearJointLimits),
             // Sensors
             ("S", RobotOp::MountSensor(SensorType::Camera)), // Generic S
             ("Si", RobotOp::MountSensor(SensorType::IMU)),
             ("St", RobotOp::MountSensor(SensorType::Touch)),
             ("Sl", RobotOp::MountSensor(SensorType::Lidar)),
+            ("Su", RobotOp::MountSensor(SensorType::Ultrasonic)),
+            // End-effector
+            ("E", RobotOp::MarkEndEffector),
             // Flow
             ("[", RobotOp::Push),
             ("]", RobotOp::Pop),
@@ -279,24 +288,33 @@ impl RobotInterpreter {
                         // Anchor on Child: The child's pivot is at its 'bottom' relative to its center.
                         let anchor_child = Vec3::new(0.0, -height_axis_len / 2.0, 0.0);
 
-                        // Axis: Transform turtle's joint axis (usually X) into Parent Local Space
-                        // Note: Axis is defined relative to the *joint frame*, which usually aligns with child?
-                        // Simpler: Use the axis relative to the Parent.
-                        // Turtle rotation represents the Child frame orientation relative to World.
-                        // We need the axis in Parent Local Space.
-                        // Global Axis = turtle.rotation * config.axis
-                        // Local Axis = parent_rot.inverse() * Global Axis
-                        let global_axis = turtle.rotation * turtle.joint_config.axis;
-                        let local_axis = parent_rot.inverse() * global_axis;
+                        // Resolve the joint type with axes baked into Parent Local Space.
+                        // The turtle stores axes in *child-local* convention (the staging axis
+                        // and the axes attached to per-axis limits are interpreted in the
+                        // turtle's current frame). Transform each into Parent Local.
+                        let to_parent_local = |child_local: Vec3| -> Vec3 {
+                            parent_rot.inverse() * (turtle.rotation * child_local)
+                        };
+                        let joint_type = realize_joint_type(&turtle.joint_config, to_parent_local);
+
+                        // Per-axis limits also live in Parent Local Space.
+                        let limits: Vec<AxisLimit> = turtle
+                            .joint_config
+                            .limits
+                            .iter()
+                            .map(|l| AxisLimit {
+                                axis: to_parent_local(l.axis),
+                                ..*l
+                            })
+                            .collect();
 
                         blueprint.add_joint(JointDefinition {
                             parent_id,
                             child_id: id,
                             anchor_parent,
                             anchor_child,
-                            joint_type: turtle.joint_config.joint_type,
-                            axis: local_axis,
-                            limits: turtle.joint_config.limits,
+                            joint_type,
+                            limits,
                         });
                     }
 
@@ -307,23 +325,95 @@ impl RobotInterpreter {
                 }
 
                 // --- CONFIG ---
-                RobotOp::SetJointType(t) => turtle.joint_config.joint_type = *t,
+                RobotOp::SetJointType(kind) => {
+                    turtle.joint_config.joint_type = match kind {
+                        JointTypeKind::Fixed => JointType::Fixed,
+                        JointTypeKind::Ball => JointType::Ball,
+                        JointTypeKind::Hinge => JointType::Hinge {
+                            axis: turtle.joint_config.axis,
+                        },
+                        JointTypeKind::Prismatic => JointType::Prismatic {
+                            axis: turtle.joint_config.axis,
+                        },
+                        JointTypeKind::Screw => JointType::Screw {
+                            axis: turtle.joint_config.axis,
+                            // Preserve any pitch already configured on a previous Screw;
+                            // otherwise default to a 1mm-per-rev fine thread.
+                            pitch: match turtle.joint_config.joint_type {
+                                JointType::Screw { pitch, .. } => pitch,
+                                _ => 0.001,
+                            },
+                        },
+                    };
+                }
+                RobotOp::SetJointAxis => {
+                    let ax = p(0, 1.0);
+                    let ay = p(1, 0.0);
+                    let az = p(2, 0.0);
+                    let new_axis = Vec3::new(ax, ay, az).normalize_or(Vec3::X);
+                    turtle.joint_config.axis = new_axis;
+                    // Update the live variant's axis so subsequent joints pick it up.
+                    turtle.joint_config.joint_type = match turtle.joint_config.joint_type {
+                        JointType::Fixed => JointType::Fixed,
+                        JointType::Ball => JointType::Ball,
+                        JointType::Hinge { .. } => JointType::Hinge { axis: new_axis },
+                        JointType::Prismatic { .. } => JointType::Prismatic { axis: new_axis },
+                        JointType::Screw { pitch, .. } => JointType::Screw {
+                            axis: new_axis,
+                            pitch,
+                        },
+                    };
+                }
+                RobotOp::SetScrewPitch => {
+                    let new_pitch = p(0, 0.001);
+                    turtle.joint_config.joint_type = match turtle.joint_config.joint_type {
+                        JointType::Screw { axis, .. } => JointType::Screw {
+                            axis,
+                            pitch: new_pitch,
+                        },
+                        // Promote to Screw using the staging axis if not already a Screw.
+                        _ => JointType::Screw {
+                            axis: turtle.joint_config.axis,
+                            pitch: new_pitch,
+                        },
+                    };
+                }
                 RobotOp::SetJointLimits => {
-                    // Params: min, max, effort, velocity
                     let a = p(0, -PI);
                     let b = p(1, PI);
-                    // Mutation can jitter limits so min > max; swap to avoid Avian3D panic.
+                    // Mutation can jitter limits so min > max; swap to keep downstream
+                    // physics engines (e.g. Avian3D) from panicking on inverted ranges.
                     let (min, max) = if a <= b { (a, b) } else { (b, a) };
                     let effort = p(2, 100.0);
                     let vel = p(3, 10.0);
-                    turtle.joint_config.limits = Some(JointLimit {
+                    turtle.joint_config.limits.push(AxisLimit {
+                        axis: turtle.joint_config.axis,
                         min,
                         max,
                         effort,
                         velocity: vel,
                     });
                 }
-                RobotOp::SetMaterial => turtle.material_id = p0 as u8,
+                RobotOp::AddAxisLimit => {
+                    let ax = p(0, 1.0);
+                    let ay = p(1, 0.0);
+                    let az = p(2, 0.0);
+                    let axis = Vec3::new(ax, ay, az).normalize_or(Vec3::X);
+                    let a = p(3, -PI);
+                    let b = p(4, PI);
+                    let (min, max) = if a <= b { (a, b) } else { (b, a) };
+                    let effort = p(5, 100.0);
+                    let vel = p(6, 10.0);
+                    turtle.joint_config.limits.push(AxisLimit {
+                        axis,
+                        min,
+                        max,
+                        effort,
+                        velocity: vel,
+                    });
+                }
+                RobotOp::ClearJointLimits => turtle.joint_config.limits.clear(),
+                RobotOp::SetMaterial => turtle.material_id = p0 as MaterialId,
                 RobotOp::SetWidth => turtle.width = p(0, turtle.width),
 
                 // --- SENSORS ---
@@ -347,6 +437,24 @@ impl RobotInterpreter {
                     }
                 }
 
+                // --- END EFFECTOR ---
+                RobotOp::MarkEndEffector => {
+                    if let Some(mod_id) = turtle.current_module_id
+                        && let Some((mod_pos, mod_rot)) = module_transforms.get(&mod_id)
+                    {
+                        let world_offset = turtle.position - *mod_pos;
+                        let local_pos = mod_rot.inverse() * world_offset;
+                        let local_rot = mod_rot.inverse() * turtle.rotation;
+                        let ee_id = p0 as crate::blueprint::EndEffectorId;
+                        blueprint.add_end_effector(EndEffector {
+                            id: ee_id,
+                            module_id: mod_id,
+                            local_position: local_pos,
+                            local_rotation: local_rot,
+                        });
+                    }
+                }
+
                 // --- FLOW ---
                 RobotOp::Push => {
                     if stack.len() < self.config.max_stack_depth {
@@ -363,5 +471,27 @@ impl RobotInterpreter {
         }
 
         blueprint
+    }
+}
+
+/// Build a [`JointType`] from the active turtle config, transforming any
+/// embedded axis from child-local to parent-local space via `to_parent_local`.
+fn realize_joint_type(
+    cfg: &crate::turtle::ActiveJointConfig,
+    to_parent_local: impl Fn(Vec3) -> Vec3,
+) -> JointType {
+    match cfg.joint_type {
+        JointType::Fixed => JointType::Fixed,
+        JointType::Ball => JointType::Ball,
+        JointType::Hinge { axis } => JointType::Hinge {
+            axis: to_parent_local(axis),
+        },
+        JointType::Prismatic { axis } => JointType::Prismatic {
+            axis: to_parent_local(axis),
+        },
+        JointType::Screw { axis, pitch } => JointType::Screw {
+            axis: to_parent_local(axis),
+            pitch,
+        },
     }
 }

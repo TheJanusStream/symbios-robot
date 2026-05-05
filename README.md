@@ -32,8 +32,39 @@ When a geometry symbol is interpreted (e.g. `B`, `C`, `O`, `K`), a new `RobotMod
 `RobotBlueprint` is a plain data structure — no engine dependencies. It contains:
 
 - `modules`: a map of `ModuleId → RobotModule` (shape, mass, transform, sensors)
-- `joints`: a list of `JointDefinition` (parent, child, anchors, type, limits)
+- `joints`: a list of `JointDefinition` (parent, child, anchors, type, per-axis limits)
+- `end_effectors`: a list of named `EndEffector` frames (TCP / gripper / probe poses)
 - `root_module`: the ID of the first module spawned (base of the kinematic chain)
+
+### Joint Types
+
+The drive axis (and screw pitch) live *inside* the `JointType` variant, so it
+is impossible to construct a joint that has both a "Fixed" type and a stray
+axis floating around:
+
+| Variant                              | DoF | Description                                                                   |
+|--------------------------------------|-----|-------------------------------------------------------------------------------|
+| `Fixed`                              | 0   | Welded — child is rigidly bonded to parent                                    |
+| `Hinge { axis }`                     | 1   | Rotation about `axis` (knee, elbow, wheel hub)                                |
+| `Ball`                               | 3   | Free rotation; constrain via per-axis limits                                  |
+| `Prismatic { axis }`                 | 1   | Translation along `axis` (linear actuator, telescoping arm)                   |
+| `Screw { axis, pitch }`              | 1   | Rotation about `axis` coupled to translation by `pitch` m/rev (lead screw)    |
+
+Limits are stored as `Vec<AxisLimit>` — empty means unconstrained, single-axis
+joints carry one entry, and `Ball` joints can carry up to three swing-twist
+constraints.
+
+### End-Effectors
+
+Tool-center-point frames are declared with the `E` symbol (parameter: `ee_id`).
+Each `EndEffector { id, module_id, local_position, local_rotation }` pins a
+named frame to the module the turtle is currently standing on. Look up by id:
+
+```rust,ignore
+let gripper = blueprint.end_effector(0).expect("primary gripper");
+```
+
+Multiple EEs are supported (e.g. `0` = left gripper, `1` = right gripper).
 
 ## Usage
 
@@ -72,32 +103,40 @@ assert_eq!(blueprint.joints.len(), 1);
 
 Use `RobotInterpreter::populate_standard_symbols` to register the conventional mappings, or register your own with `set_op`.
 
-| Symbol | Operation                  | Parameters                     |
-|--------|----------------------------|--------------------------------|
-| `f`    | Move forward (no geometry) | `(length)`                     |
-| `+`    | Yaw +1× default angle      | `(angle_deg)` override         |
-| `-`    | Yaw −1× default angle      | `(angle_deg)` override         |
-| `&`    | Pitch +1× default angle    | `(angle_deg)` override         |
-| `^`    | Pitch −1× default angle    | `(angle_deg)` override         |
-| `\`    | Roll +1× default angle     | `(angle_deg)` override         |
-| `/`    | Roll −1× default angle     | `(angle_deg)` override         |
-| `\|`   | Turn around 180°           | —                              |
-| `B`    | Spawn Box                  | `(length, width, depth)`       |
-| `C`    | Spawn Cylinder             | `(length, radius)`             |
-| `O`    | Spawn Sphere               | `(radius)`                     |
-| `K`    | Spawn Capsule              | `(length, radius)`             |
-| `!`    | Set default width/radius   | `(width)`                      |
-| `'`    | Set material ID            | `(material_id)`                |
-| `J`    | Set next joint → Hinge     | —                              |
-| `Jf`   | Set next joint → Fixed     | —                              |
-| `Jb`   | Set next joint → Ball      | —                              |
-| `Jl`   | Set joint limits           | `(min, max, effort, velocity)` |
-| `S`    | Mount Camera sensor        | —                              |
-| `Si`   | Mount IMU sensor           | —                              |
-| `St`   | Mount Touch sensor         | —                              |
-| `Sl`   | Mount Lidar sensor         | —                              |
-| `[`    | Push turtle state          | —                              |
-| `]`    | Pop turtle state           | —                              |
+| Symbol | Operation                         | Parameters                                 |
+|--------|-----------------------------------|--------------------------------------------|
+| `f`    | Move forward (no geometry)        | `(length)`                                 |
+| `+`    | Yaw +1× default angle             | `(angle_deg)` override                     |
+| `-`    | Yaw −1× default angle             | `(angle_deg)` override                     |
+| `&`    | Pitch +1× default angle           | `(angle_deg)` override                     |
+| `^`    | Pitch −1× default angle           | `(angle_deg)` override                     |
+| `\`    | Roll +1× default angle            | `(angle_deg)` override                     |
+| `/`    | Roll −1× default angle            | `(angle_deg)` override                     |
+| `\|`   | Turn around 180°                  | —                                          |
+| `B`    | Spawn Box                         | `(length, width, depth)`                   |
+| `C`    | Spawn Cylinder                    | `(length, radius)`                         |
+| `O`    | Spawn Sphere                      | `(radius)`                                 |
+| `K`    | Spawn Capsule                     | `(length, radius)`                         |
+| `!`    | Set default width/radius          | `(width)`                                  |
+| `'`    | Set material ID                   | `(material_id)`                            |
+| `J`    | Set next joint → Hinge            | —                                          |
+| `Jf`   | Set next joint → Fixed            | —                                          |
+| `Jb`   | Set next joint → Ball             | —                                          |
+| `Jp`   | Set next joint → Prismatic        | —                                          |
+| `Js`   | Set next joint → Screw            | —                                          |
+| `Ja`   | Set staging joint axis            | `(ax, ay, az)`                             |
+| `Jh`   | Set screw pitch (helix)           | `(pitch_m_per_rev)`                        |
+| `Jl`   | Append axis limit (current axis)  | `(min, max, effort, velocity)`             |
+| `Jla`  | Append axis limit (explicit axis) | `(ax, ay, az, min, max, effort, velocity)` |
+| `Jlc`  | Clear accumulated joint limits    | —                                          |
+| `S`    | Mount Camera sensor               | —                                          |
+| `Si`   | Mount IMU sensor                  | —                                          |
+| `St`   | Mount Touch sensor                | —                                          |
+| `Sl`   | Mount Lidar sensor                | —                                          |
+| `Su`   | Mount Ultrasonic sensor           | —                                          |
+| `E`    | Mark end-effector / TCP           | `(ee_id)`                                  |
+| `[`    | Push turtle state                 | —                                          |
+| `]`    | Pop turtle state                  | —                                          |
 
 ## Configuration
 
