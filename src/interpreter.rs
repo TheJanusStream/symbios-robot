@@ -19,15 +19,22 @@ use symbios::{SymbiosState, SymbolTable};
 /// Configuration for robot interpretation.
 #[derive(Clone, Debug)]
 pub struct RobotConfig {
-    /// Default length/height for shapes if no parameter is provided.
+    /// Default length (along the turtle's growth axis) for shapes when no
+    /// `length` parameter is provided. Default: `1.0` m.
     pub default_length: f32,
-    /// Default width/radius for shapes.
+    /// Default width / radius for shapes when no parameter is provided.
+    /// Used as both the lateral extent for `Box` and the radius for round
+    /// primitives. Default: `0.2` m.
     pub default_width: f32,
-    /// Default density (kg/m^3) for calculating mass. Default: 50 (Hollow Plastic-ish).
+    /// Density (kg/m³) used to derive each module's mass from its shape volume
+    /// via [`bevy_heavy::ComputeMassProperties3d`]. Default: `100.0` (a
+    /// hollow-plastic-ish ballpark).
     pub default_density: f32,
-    /// Default rotation angle (in radians) for Yaw/Pitch/Roll.
+    /// Default rotation step (in radians) applied by the rotation operations
+    /// (`Yaw`, `Pitch`, `Roll`) when no override is given. Default: `45°`.
     pub default_angle: f32,
-    /// Maximum stack depth for push/pop operations.
+    /// Maximum number of nested `Push` operations. Pushes that would exceed
+    /// this depth are silently dropped. Default: `1024`.
     pub max_stack_depth: usize,
 }
 
@@ -143,8 +150,11 @@ impl RobotInterpreter {
     /// Interprets the full L-System `state` and returns the resulting [`RobotBlueprint`].
     ///
     /// Walks every symbol in `state` in order, dispatching each to its registered
-    /// [`RobotOp`]. The turtle starts at the world origin facing `+Y`. Symbols with
-    /// no registered mapping are silently ignored.
+    /// [`RobotOp`]. The turtle starts at the world origin with identity rotation;
+    /// its growth axis (`up()`) is therefore `+Y` and forward movement / geometry
+    /// extends along `+Y`. Symbols with no registered mapping are treated as
+    /// [`RobotOp::Ignore`] (silently skipped). Symbol IDs that exceed the
+    /// configured op-map length are likewise skipped.
     ///
     /// # Geometry placement
     ///

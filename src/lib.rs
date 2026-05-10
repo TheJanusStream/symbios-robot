@@ -28,10 +28,23 @@
 //!
 //! ## Modules
 //!
-//! - [`blueprint`] — Data structures: [`blueprint::RobotBlueprint`], [`blueprint::RobotModule`],
-//!   [`blueprint::JointDefinition`], [`blueprint::ShapePrimitive`], etc.
-//! - [`interpreter`] — [`interpreter::RobotInterpreter`] and [`interpreter::RobotConfig`].
-//! - [`turtle`] — [`turtle::RobotTurtleState`], [`turtle::RobotOp`], and [`turtle::ActiveJointConfig`].
+//! - [`blueprint`] — Engine-agnostic data: [`blueprint::RobotBlueprint`],
+//!   [`blueprint::RobotModule`], [`blueprint::ShapePrimitive`],
+//!   [`blueprint::JointDefinition`], [`blueprint::JointType`] /
+//!   [`blueprint::JointTypeKind`], [`blueprint::AxisLimit`],
+//!   [`blueprint::EndEffector`] (addressed by [`blueprint::EndEffectorId`]),
+//!   [`blueprint::SensorMount`] / [`blueprint::SensorType`], and the
+//!   [`blueprint::ModuleId`] / [`blueprint::MaterialId`] aliases.
+//! - [`interpreter`] — [`interpreter::RobotInterpreter`] (with
+//!   [`interpreter::RobotInterpreter::set_op`],
+//!   [`interpreter::RobotInterpreter::with_map`], and
+//!   [`interpreter::RobotInterpreter::populate_standard_symbols`]) plus
+//!   [`interpreter::RobotConfig`].
+//! - [`turtle`] — [`turtle::RobotTurtleState`], [`turtle::RobotOp`], and
+//!   [`turtle::ActiveJointConfig`] (the per-step state the interpreter
+//!   threads through the symbol stream).
+//!
+//! All public items in these modules are re-exported at the crate root.
 
 pub mod blueprint;
 pub mod interpreter;

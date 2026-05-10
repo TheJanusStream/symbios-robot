@@ -31,10 +31,16 @@ When a geometry symbol is interpreted (e.g. `B`, `C`, `O`, `K`), a new `RobotMod
 
 `RobotBlueprint` is a plain data structure — no engine dependencies. It contains:
 
-- `modules`: a map of `ModuleId → RobotModule` (shape, mass, transform, sensors)
+- `modules`: a map of `ModuleId → RobotModule` (shape, mass, density, material, transform, sensors)
 - `joints`: a list of `JointDefinition` (parent, child, anchors, type, per-axis limits)
 - `end_effectors`: a list of named `EndEffector` frames (TCP / gripper / probe poses)
 - `root_module`: the ID of the first module spawned (base of the kinematic chain)
+
+`RobotBlueprint` is marked `#[non_exhaustive]` so future additions (new sensor
+graphs, cabling, etc.) can be made without breaking downstream consumers.
+Construct one via `RobotBlueprint::new()` / `Default` and the
+`add_module` / `add_joint` / `add_end_effector` helpers — never with a struct
+literal.
 
 ### Joint Types
 
@@ -101,7 +107,20 @@ assert_eq!(blueprint.joints.len(), 1);
 
 ## Standard Symbol Mappings
 
-Use `RobotInterpreter::populate_standard_symbols` to register the conventional mappings, or register your own with `set_op`.
+The interpreter is built around a sparse `Vec<RobotOp>` indexed by `symbios`
+symbol ID. Three ways to populate it:
+
+- `RobotInterpreter::populate_standard_symbols(&interner)` — registers the
+  conventional symbol→op mappings shown below for every symbol that has been
+  interned. Symbols that were never interned are silently skipped.
+- `RobotInterpreter::set_op(sym_id, op)` — assigns a single op; the map is
+  grown as needed and gaps are filled with `RobotOp::Ignore`.
+- `RobotInterpreter::with_map(map)` — replaces the entire op map in one shot
+  (builder style); useful when you've precomputed the full mapping table.
+
+Set-joint-type entries use `JointTypeKind` (a payload-free tag enum) so the
+mapping table doesn't have to invent a placeholder axis or pitch — those are
+filled in from the live turtle's `ActiveJointConfig` when the joint is built.
 
 | Symbol | Operation                         | Parameters                                 |
 |--------|-----------------------------------|--------------------------------------------|
@@ -142,13 +161,13 @@ Use `RobotInterpreter::populate_standard_symbols` to register the conventional m
 
 `RobotConfig` controls interpreter defaults:
 
-| Field             | Default       | Description                                       |
-|-------------------|---------------|---------------------------------------------------|
-| `default_length`  | `1.0` m       | Segment length when no parameter given            |
-| `default_width`   | `0.2` m       | Segment width/radius when no parameter given      |
-| `default_density` | `100.0` kg/m³ | Density for mass computation (hollow plastic–ish) |
-| `default_angle`   | `45°`         | Rotation step for `+`, `-`, `&`, `^`, `\`, `/`    |
-| `max_stack_depth` | `1024`        | Maximum push/pop nesting depth                    |
+| Field             | Default       | Description                                                        |
+|-------------------|---------------|--------------------------------------------------------------------|
+| `default_length`  | `1.0` m       | Segment length (along growth axis) when no parameter given         |
+| `default_width`   | `0.2` m       | Initial turtle width / lateral extent when no parameter given      |
+| `default_density` | `100.0` kg/m³ | Density used by `bevy_heavy` to derive each module's mass          |
+| `default_angle`   | `45°`         | Rotation step for `+`, `-`, `&`, `^`, `\`, `/`                     |
+| `max_stack_depth` | `1024`        | Maximum push/pop nesting depth (excess pushes are silently dropped)|
 
 ## Bounding Box
 

@@ -115,26 +115,38 @@ impl RobotTurtleState {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum RobotOp {
     // --- Spatial Navigation ---
-    /// Move forward without spawning geometry (`f`).
+    /// Move forward (along the turtle's growth axis) without spawning geometry (`f`).
+    /// Optional param: `(length)`; defaults to [`crate::RobotConfig::default_length`].
     Move,
-    /// Rotate around Z (`+`/`-`).
+    /// Rotate around the turtle's local Z axis (`+`/`-`). The wrapped `f32`
+    /// is the per-symbol sign multiplier (`+1.0` or `-1.0`); the rotation
+    /// amount comes from the optional `(angle_deg)` param or
+    /// [`crate::RobotConfig::default_angle`].
     Yaw(f32),
-    /// Rotate around X (`&`/`^`).
+    /// Rotate around the turtle's local X axis (`&`/`^`). See [`Yaw`](Self::Yaw)
+    /// for the sign / param semantics.
     Pitch(f32),
-    /// Rotate around Y (`\` / `/`).
+    /// Rotate around the turtle's local Y axis (`\` / `/`). See [`Yaw`](Self::Yaw)
+    /// for the sign / param semantics.
     Roll(f32),
-    /// Turn 180 degrees (`|`).
+    /// Turn 180° about the turtle's local Z axis (`|`). Equivalent to `Yaw(±π)`.
     TurnAround,
 
     // --- Geometry Spawning (The Body) ---
-    /// Spawn a Box shape. Params: `(length, width, height)`.
-    /// If params missing, uses `(default_step, width, width)`.
+    /// Spawn a Box shape. Params: `(length, width, depth)` mapping to the
+    /// box's `(Y, X, Z)` extents (Y is the turtle's growth axis).
+    /// If params are missing, falls back to
+    /// `(RobotConfig::default_length, turtle.width, turtle.width)`.
     SpawnBox,
-    /// Spawn a Cylinder shape. Params: `(length, radius)`.
+    /// Spawn a Cylinder shape (height aligned with the turtle's growth axis).
+    /// Params: `(length, radius)`. Defaults: `length = default_length`,
+    /// `radius = turtle.width / 2`.
     SpawnCylinder,
-    /// Spawn a Sphere shape. Params: `(radius)`.
+    /// Spawn a Sphere shape. Params: `(radius)`. Default: `turtle.width / 2`.
     SpawnSphere,
-    /// Spawn a Capsule shape. Params: `(length, radius)`.
+    /// Spawn a Capsule shape (axis aligned with the turtle's growth axis).
+    /// Params: `(length, radius)`. Defaults: `length = default_length`,
+    /// `radius = turtle.width / 2`.
     SpawnCapsule,
 
     // --- Configuration (The Physics) ---
@@ -159,9 +171,12 @@ pub enum RobotOp {
     AddAxisLimit,
     /// Clear any accumulated [`AxisLimit`]s from the staging joint config.
     ClearJointLimits,
-    /// Set the Material ID for visual rendering. Params: `(material_id)`.
+    /// Set the Material ID for visual rendering. Params: `(material_id)`
+    /// (cast to [`crate::MaterialId`]).
     SetMaterial,
-    /// Set the default width/radius for subsequent shapes.
+    /// Set the turtle's current width / radius used as the default lateral
+    /// extent for subsequent shapes. Params: `(width)`; if omitted the value
+    /// is left unchanged.
     SetWidth,
 
     // --- Attachments (The Senses) ---

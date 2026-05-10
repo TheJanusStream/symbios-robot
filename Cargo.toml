@@ -11,7 +11,7 @@ keywords = ["lsystem", "procedural", "generative", "simulation"]
 categories = ["simulation", "game-development"]
 
 [dependencies]
-symbios = { path = "../symbios" }
+symbios = "1.5"
 glam = { version = "0.30.10", features = ["serde"] }
 bevy_heavy = { version = "0.4", default-features = false, features = [
     "3d",
