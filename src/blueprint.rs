@@ -1,7 +1,8 @@
 use bevy_heavy::ComputeMassProperties3d;
 use bevy_math::Isometry3d;
-use bevy_math::bounding::{Aabb3d, Bounded3d, BoundingSphere, BoundingVolume};
-use bevy_math::primitives::{Capsule3d, Cuboid, Cylinder, Sphere};
+use bevy_shape::{
+    Aabb3d, Bounded3d, BoundingSphere, BoundingVolume, Capsule3d, Cuboid, Cylinder, Sphere,
+};
 use glam::{Quat, Vec3};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -131,10 +132,10 @@ pub enum ShapePrimitive {
     Capsule { radius: f32, height: f32 },
 }
 
-/// A type-erased wrapper around `bevy_math` primitives.
+/// A type-erased wrapper around `bevy_shape` primitives.
 ///
 /// Enables calling [`bevy_heavy::ComputeMassProperties3d`] and
-/// [`bevy_math::bounding::Bounded3d`] on any [`ShapePrimitive`] variant through a
+/// [`bevy_shape::Bounded3d`] on any [`ShapePrimitive`] variant through a
 /// single enum dispatch. Obtain one via [`ShapePrimitive::to_bevy_primitive`].
 #[derive(Clone, Copy, Debug)]
 pub enum BevyPrimitive {
@@ -194,7 +195,7 @@ impl Bounded3d for BevyPrimitive {
 }
 
 impl ShapePrimitive {
-    /// Convert to the corresponding `bevy_math` primitive for mass-property computation.
+    /// Convert to the corresponding `bevy_shape` primitive for mass-property computation.
     pub fn to_bevy_primitive(self) -> BevyPrimitive {
         match self {
             Self::Box(half_extents) => BevyPrimitive::Cuboid(Cuboid {

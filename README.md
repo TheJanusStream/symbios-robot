@@ -183,7 +183,8 @@ println!("Robot size: {:?}", aabb.half_size());
 
 - [`symbios`](https://crates.io/crates/symbios) — L-System engine providing `SymbiosState` and `SymbolTable`
 - [`glam`](https://crates.io/crates/glam) — Math primitives (`Vec3`, `Quat`)
-- [`bevy_math`](https://crates.io/crates/bevy_math) — Geometric primitives and bounding volume computation
+- [`bevy_math`](https://crates.io/crates/bevy_math) - Isometries for placing shapes
+- [`bevy_shape`](https://crates.io/crates/bevy_shape) - Geometric primitives and bounding volume computation (split out of `bevy_math` in Bevy 0.20)
 - [`bevy_heavy`](https://crates.io/crates/bevy_heavy) — Mass property computation from shape geometry
 - [`serde`](https://crates.io/crates/serde) — Serialization of the blueprint
 

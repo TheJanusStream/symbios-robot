@@ -1,6 +1,6 @@
 [package]
 name = "symbios-robot"
-version = "0.4.1"
+version = "0.5.0"
 edition = "2024"
 authors = ["Janus"]
 description = "Engine-agnostic robot interpretation layer for Symbios L-Systems using glam."
@@ -12,12 +12,14 @@ categories = ["simulation", "game-development"]
 
 [dependencies]
 symbios = "1.5"
-glam = { version = "0.32", features = ["serde"] }
-bevy_heavy = { version = "0.5", default-features = false, features = [
+glam = { version = "0.33", features = ["serde"] }
+bevy_heavy = { version = "0.6", default-features = false, features = [
     "3d",
     "std",
 ] }
-bevy_math = { version = "0.19", default-features = false, features = ["std"] }
+bevy_math = { version = "0.20", default-features = false, features = ["std"] }
+# Bevy 0.20 moved the primitive shapes and bounding volumes out of bevy_math.
+bevy_shape = { version = "0.20", default-features = false, features = ["std"] }
 serde = { version = "1.0", features = ["derive"] }
 
 [dev-dependencies]
